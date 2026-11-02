@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoPulse - Bulk IP Geolocation & Geotagging Dashboard</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            900: '#1e1b4b',
+                        },
+                        darkbg: '#0b0f17',
+                        panel: '#151c28',
+                        panelBorder: '#232d3f'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Custom Styling -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0b0f17;
+            color: #e2e8f0;
+        }
+
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0b0f17;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #232d3f;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4f46e5;
+        }
+
+        /* Map Element */
+        #map {
+            width: 100%;
+            height: 100%;
+            min-height: 420px;
+            border-radius: 0.75rem;
+            z-index: 10;
+        }
+
+        /* Leaflet Marker Styling */
+        .custom-map-marker {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .marker-pin {
+            width: 26px;
+            height: 26px;
+            border-radius: 50% 50% 50% 0;
+            position: absolute;
+            transform: rotate(-45deg);
+            left: 50%;
+            top: 50%;
+            margin: -16px 0 0 -13px;
+            box-shadow: 0 0 12px rgba(0,0,0,0.6);
+            border: 2px solid #ffffff;
+            transition: transform 0.2s ease;
+        }
+        .marker-pin:hover {
+            transform: rotate(-45deg) scale(1.15);
+        }
+        .marker-pin::after {
+            content: '';
+            width: 10px;
+            height: 10px;
+            margin: 6px 0 0 6px;
+            background: #fff;
+            position: absolute;
+            border-radius: 50%;
+        }
+
+        .pulse-public {
+            background: #06b6d4;
+        }
+        .pulse-private {
+            background: #f59e0b;
+        }
+        .pulse-error {
+            background: #ef4444;
+        }
+
+        /* Leaflet Popups Custom Theme */
+        .leaflet-popup-content-wrapper {
+            background: #151c28 !important;
+            color: #e2e8f0 !important;
+            border: 1px solid #232d3f;
+            border-radius: 0.75rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
+            padding: 4px;
+        }
+        .leaflet-popup-tip {
+            background: #151c28 !important;
+        }
+        .leaflet-container {
+            background-color: #0b0f17 !important;
+        }
+
+        /* Glassmorphism Effect */
+        .glass-panel {
+            background: rgba(21, 28, 40, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid #232d3f;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden text-slate-200 bg-darkbg">
+
+    <!-- Top Navigation Header -->
+    <header class="bg-panel border-b border-panelBorder px-6 py-3 flex flex-wrap items-center justify-between shrink-0 gap-3">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 flex items-center justify-center text-white font-bold shadow-lg shadow-indigo-500/20">
+                <i class="fa-solid fa-earth-americas text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-wide text-white flex items-center gap-2">
+                    GeoPulse <span class="text-xs px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-400 font-mono border border-indigo-500/30">v3.0</span>
+                </h1>
+                <p class="text-xs text-slate-400">Bulk IP Geolocation, Network Classifier & Google Maps Geotagger</p>
+            </div>
+        </div>
+
+        <!-- Quick Header Action Buttons -->
+        <div class="flex items-center space-x-3">
+            <button id="btnSampleData" class="px-3.5 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-all flex items-center gap-1.5 shadow-sm">
+                <i class="fa-solid fa-flask text-indigo-400"></i> Load Sample IPs
+            </button>
+            <button id="btnExportCSV" class="px-3.5 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-md shadow-indigo-600/30 transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                <i class="fa-solid fa-file-csv"></i> Export Results CSV
+            </button>
+            <button id="btnClear" class="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-red-400 bg-slate-800/50 hover:bg-red-500/10 border border-slate-700/50 rounded-lg transition-all">
+                <i class="fa-solid fa-trash-can"></i> Clear
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace (2-Column Grid View) -->
+    <div class="flex-1 flex flex-col md:flex-row overflow-hidden p-4 gap-4">
+        
+        <!-- Left Panel: Input, Statistics & Data Table -->
+        <div class="w-full md:w-1/2 flex flex-col gap-4 overflow-hidden">
+            
+            <!-- Input & Parser Control Card -->
+            <div class="bg-panel border border-panelBorder rounded-xl p-4 flex flex-col gap-3 shrink-0">
+                
+                <!-- Input Tabs Header -->
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <div class="flex gap-2">
+                        <button id="tabTextBtn" class="px-3 py-1 text-xs font-semibold rounded-md bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 transition-all">
+                            <i class="fa-solid fa-font me-1"></i> Paste Text / Logs
+                        </button>
+                        <button id="tabFileBtn" class="px-3 py-1 text-xs font-semibold rounded-md text-slate-400 hover:text-white transition-all">
+                            <i class="fa-solid fa-file-arrow-up me-1"></i> Upload File (.csv, .txt, .log, .json)
+                        </button>
+                    </div>
+                    <span id="extractedCountBadge" class="text-xs font-mono text-cyan-400 bg-cyan-950/50 px-2.5 py-0.5 rounded-full border border-cyan-800/50 hidden">
+                        0 IPs detected
+                    </span>
+                </div>
+
+                <!-- Tab Area 1: Raw Text input -->
+                <div id="tabTextArea" class="flex flex-col gap-2">
+                    <textarea id="ipInputText" rows="3" placeholder="Paste IP addresses, server logs, CSVs, or JSON here... (e.g., 8.8.8.8, 1.1.1.1, 192.168.1.1, 151.101.1.69)" class="w-full bg-slate-900 border border-slate-700/70 rounded-lg p-2.5 text-xs font-mono text-slate-200 focus:outline-none focus:border-indigo-500 transition-all resize-none"></textarea>
+                </div>
+
+                <!-- Tab Area 2: File Upload Zone -->
+                <div id="tabFileArea" class="hidden">
+                    <div id="dropZone" class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-lg p-4 text-center cursor-pointer bg-slate-900/50 hover:bg-indigo-950/10 transition-all">
+                        <i class="fa-solid fa-cloud-arrow-up text-2xl text-indigo-400 mb-1"></i>
+                        <p class="text-xs text-slate-300 font-medium">Click to upload or drag & drop CSV, TXT, LOG, or JSON file</p>
+                        <p class="text-[10px] text-slate-500 mt-0.5">Automated IPv4 & IPv6 regex extraction engine</p>
+                        <input type="file" id="fileInput" accept=".csv, .txt, .log, .json" class="hidden">
+                    </div>
+                </div>
+
+                <!-- Action Controls Row -->
+                <div class="flex items-center justify-between pt-1">
+                    <div class="flex items-center gap-3">
+                        <label class="flex items-center gap-1.5 cursor-pointer text-xs text-slate-400">
+                            <input type="checkbox" id="chkIgnorePrivate" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+                            <span>Skip private IPs</span>
+                        </label>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <button id="btnStartProcess" class="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-md shadow-indigo-600/30 transition-all flex items-center gap-1.5">
+                            <i class="fa-solid fa-play"></i> Run Geolocation & Geotag
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Progress Bar -->
+                <div id="progressContainer" class="hidden space-y-1 mt-1">
+                    <div class="flex justify-between text-[11px] text-slate-400">
+                        <span id="progressText">Processing IPs...</span>
+                        <span id="progressPercent" class="font-mono">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                        <div id="progressBar" class="bg-gradient-to-r from-indigo-500 to-cyan-400 h-1.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- KPI Metric Cards Row -->
+            <div class="grid grid-cols-4 gap-3 shrink-0">
+                <div class="bg-panel border border-panelBorder rounded-xl p-3 flex flex-col">
+                    <span class="text-[11px] font-medium text-slate-400">Total Processed</span>
+                    <span id="statTotal" class="text-xl font-bold font-mono text-white mt-1">0</span>
+                </div>
+                <div class="bg-panel border border-panelBorder rounded-xl p-3 flex flex-col">
+                    <span class="text-[11px] font-medium text-slate-400">Public IPs</span>
+                    <span id="statPublic" class="text-xl font-bold font-mono text-cyan-400 mt-1">0</span>
+                </div>
+                <div class="bg-panel border border-panelBorder rounded-xl p-3 flex flex-col">
+                    <span class="text-[11px] font-medium text-slate-400">Private / Local</span>
+                    <span id="statPrivate" class="text-xl font-bold font-mono text-amber-400 mt-1">0</span>
+                </div>
+                <div class="bg-panel border border-panelBorder rounded-xl p-3 flex flex-col">
+                    <span class="text-[11px] font-medium text-slate-400">Geotagged Locations</span>
+                    <span id="statGeotagged" class="text-xl font-bold font-mono text-emerald-400 mt-1">0</span>
+                </div>
+            </div>
+
+            <!-- Results Data Table Container -->
+            <div class="bg-panel border border-panelBorder rounded-xl flex-1 flex flex-col overflow-hidden min-h-0">
+                
+                <!-- Table Header Controls -->
+                <div class="p-3 border-b border-panelBorder flex items-center justify-between gap-3">
+                    <div class="relative flex-1">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-500"></i>
+                        <input type="text" id="tableSearch" placeholder="Filter IPs, Cities, Countries, ISPs..." class="w-full bg-slate-900 border border-slate-700/70 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition-all">
+                    </div>
+                    
+                    <!-- Filter Pills -->
+                    <div class="flex items-center gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800">
+                        <button data-filter="all" class="btn-filter px-2.5 py-1 text-[11px] rounded font-medium bg-indigo-600 text-white">All</button>
+                        <button data-filter="public" class="btn-filter px-2.5 py-1 text-[11px] rounded font-medium text-slate-400 hover:text-white">Public</button>
+                        <button data-filter="private" class="btn-filter px-2.5 py-1 text-[11px] rounded font-medium text-slate-400 hover:text-white">Private</button>
+                        <button data-filter="failed" class="btn-filter px-2.5 py-1 text-[11px] rounded font-medium text-slate-400 hover:text-white">Failed</button>
+                    </div>
+                </div>
+
+                <!-- Table Content -->
+                <div class="flex-1 overflow-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead class="bg-slate-900/80 sticky top-0 text-slate-400 font-semibold border-b border-slate-800 z-10">
+                            <tr>
+                                <th class="p-2.5">IP Address</th>
+                                <th class="p-2.5">Type</th>
+                                <th class="p-2.5">Country / City</th>
+                                <th class="p-2.5">ISP / Provider</th>
+                                <th class="p-2.5 text-center">Locate</th>
+                                <th class="p-2.5 text-center">Google Geotag</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody" class="divide-y divide-slate-800/60 font-mono text-[11px]">
+                            <!-- Rows injected dynamically -->
+                            <tr>
+                                <td colspan="6" class="p-8 text-center text-slate-500 font-sans">
+                                    <i class="fa-solid fa-map-location-dot text-2xl mb-2 text-slate-600 block"></i>
+                                    No IP addresses processed yet. Paste IPs above or click <strong>Load Sample IPs</strong>.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Table Footer Status -->
+                <div class="px-3 py-2 bg-slate-900/60 border-t border-slate-800 text-[11px] text-slate-400 flex justify-between items-center">
+                    <span id="tableCountText">Showing 0 entries</span>
+                    <span id="statusNotice" class="text-slate-500 font-sans">Ready</span>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right Panel: Leaflet Map & Layer Selection -->
+        <div class="w-full md:w-1/2 flex flex-col gap-3 h-full">
+            
+            <div class="bg-panel border border-panelBorder rounded-xl flex-1 flex flex-col p-3 relative overflow-hidden">
+                
+                <!-- Map Layer Switcher & Map Overlay Controls -->
+                <div class="absolute top-5 right-5 z-20 flex flex-wrap gap-2">
+                    <!-- Layer Selector Dropdown -->
+                    <div class="relative bg-slate-900/90 border border-slate-700/80 rounded-lg shadow-xl backdrop-blur-sm">
+                        <select id="mapLayerSelect" class="bg-transparent text-slate-200 text-xs font-medium px-3 py-1.5 focus:outline-none cursor-pointer">
+                            <option value="cartoDark" class="bg-slate-900 text-white" selected>🌙 CartoDB Dark</option>
+                            <option value="googleRoadmap" class="bg-slate-900 text-white">🗺️ Google Roadmap</option>
+                            <option value="googleHybrid" class="bg-slate-900 text-white">🛰️ Google Satellite Hybrid</option>
+                            <option value="googleTerrain" class="bg-slate-900 text-white">⛰️ Google Terrain</option>
+                        </select>
+                    </div>
+
+                    <button id="btnFitMap" title="Zoom to fit all markers" class="bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-200 px-2.5 py-1.5 rounded-lg text-xs font-medium shadow-xl backdrop-blur-sm transition-all flex items-center gap-1.5">
+                        <i class="fa-solid fa-expand text-indigo-400"></i> Fit Boundaries
+                    </button>
+                    <button id="btnResetMap" title="Reset default world view" class="bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-200 px-2.5 py-1.5 rounded-lg text-xs font-medium shadow-xl backdrop-blur-sm transition-all flex items-center gap-1.5">
+                        <i class="fa-solid fa-rotate text-cyan-400"></i> World View
+                    </button>
+                </div>
+
+                <!-- Leaflet Map Canvas -->
+                <div id="map"></div>
+
+                <!-- Map Legend Overlay -->
+                <div class="absolute bottom-5 left-5 z-20 bg-slate-900/90 border border-slate-700/80 rounded-lg p-2.5 text-[11px] backdrop-blur-sm shadow-xl space-y-1.5">
+                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Map Legend</div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-sm shadow-cyan-500/50"></span>
+                        <span class="text-slate-300">Public IP Location</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm shadow-amber-500/50"></span>
+                        <span class="text-slate-300">Private / Local Range</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-red-400 shadow-sm shadow-red-500/50"></span>
+                        <span class="text-slate-300">Failed / Unresolved</span>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Toast Notification Overlay -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Application JavaScript Engine -->
+    <script>
+        // Sample Test Dataset
+        const SAMPLE_IPS = [
+            "8.8.8.8",             // Google DNS (USA)
+            "1.1.1.1",             // Cloudflare (Australia / Global)
+            "192.168.1.1",         // Private Network
+            "185.199.108.153",     // GitHub CDN (USA)
+            "10.0.0.50",           // Private RFC1918
+            "114.114.114.114",     // 114DNS (China)
+            "151.101.1.69",        // Fastly CDN (UK)
+            "127.0.0.1",           // Loopback
+            "13.227.74.89",        // AWS CloudFront (Japan)
+            "2001:4860:4860::8888"   // Google IPv6
+        ];
+
+        // State Store
+        let appState = {
+            processedResults: [],
+            currentFilter: 'all',
+            searchQuery: '',
+            isProcessing: false,
+            activeLayerName: 'cartoDark'
+        };
+
+        // Map and Tile Layers Variables
+        let map = null;
+        let mapMarkers = [];
+        let tileLayers = {};
+
+        // DOM Element Registry
+        const elements = {
+            ipInputText: document.getElementById('ipInputText'),
+            fileInput: document.getElementById('fileInput'),
+            dropZone: document.getElementById('dropZone'),
+            tabTextBtn: document.getElementById('tabTextBtn'),
+            tabFileBtn: document.getElementById('tabFileBtn'),
+            tabTextArea: document.getElementById('tabTextArea'),
+            tabFileArea: document.getElementById('tabFileArea'),
+            extractedCountBadge: document.getElementById('extractedCountBadge'),
+            chkIgnorePrivate: document.getElementById('chkIgnorePrivate'),
+            btnStartProcess: document.getElementById('btnStartProcess'),
+            btnSampleData: document.getElementById('btnSampleData'),
+            btnExportCSV: document.getElementById('btnExportCSV'),
+            btnClear: document.getElementById('btnClear'),
+            btnFitMap: document.getElementById('btnFitMap'),
+            btnResetMap: document.getElementById('btnResetMap'),
+            mapLayerSelect: document.getElementById('mapLayerSelect'),
+            progressContainer: document.getElementById('progressContainer'),
+            progressBar: document.getElementById('progressBar'),
+            progressText: document.getElementById('progressText'),
+            progressPercent: document.getElementById('progressPercent'),
+            statTotal: document.getElementById('statTotal'),
+            statPublic: document.getElementById('statPublic'),
+            statPrivate: document.getElementById('statPrivate'),
+            statGeotagged: document.getElementById('statGeotagged'),
+            tableBody: document.getElementById('tableBody'),
+            tableSearch: document.getElementById('tableSearch'),
+            tableCountText: document.getElementById('tableCountText'),
+            statusNotice: document.getElementById('statusNotice')
+        };
+
+        // Initialize App on DOM Load
+        window.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            setupEventListeners();
+            updateStats();
+        });
+
+        // Initialize Leaflet Map with Google Maps & CartoDB Tile Layers
+        function initMap() {
+            // Define Tile Layers
+            tileLayers = {
+                cartoDark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                    maxZoom: 19,
+                    subdomains: 'abcd',
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                }),
+                googleRoadmap: L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+                    maxZoom: 20,
+                    subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+                    attribution: '&copy; Google Maps'
+                }),
+                googleHybrid: L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
+                    maxZoom: 20,
+                    subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+                    attribution: '&copy; Google Maps Hybrid'
+                }),
+                googleTerrain: L.tileLayer('https://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', {
+                    maxZoom: 20,
+                    subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+                    attribution: '&copy; Google Maps Terrain'
+                })
+            };
+
+            map = L.map('map', {
+                center: [20, 0],
+                zoom: 2,
+                zoomControl: false
+            });
+
+            // Set default dark theme layer
+            tileLayers.cartoDark.addTo(map);
+
+            // Add Leaflet Zoom Control to top-left
+            L.control.zoom({ position: 'topleft' }).addTo(map);
+        }
+
+        // Switch Map Layer Function
+        function switchMapLayer(layerKey) {
+            if (!tileLayers[layerKey]) return;
+
+            // Remove existing layers
+            Object.values(tileLayers).forEach(layer => {
+                if (map.hasLayer(layer)) {
+                    map.removeLayer(layer);
+                }
+            });
+
+            // Add newly selected layer
+            tileLayers[layerKey].addTo(map);
+            appState.activeLayerName = layerKey;
+            showToast(`Map layer switched to ${layerKey}`, 'info');
+        }
+
+        // IP Network Classifier
+        function classifyIP(ip) {
+            const cleanIp = ip.trim();
+
+            // IPv4 Parsing
+            const ipv4Regex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+            const v4Match = cleanIp.match(ipv4Regex);
+
+            if (v4Match) {
+                const octets = v4Match.slice(1).map(Number);
+                if (octets.some(o => o > 255)) return { isValid: false, type: 'Invalid', isPrivate: false, version: 'IPv4' };
+
+                const [o1, o2] = octets;
+
+                // Private RFC1918, CGNAT, Loopback & Link-Local check
+                const isPrivate = 
+                    (o1 === 10) || // 10.0.0.0/8
+                    (o1 === 172 && o2 >= 16 && o2 <= 31) || // 172.16.0.0/12
+                    (o1 === 192 && o2 === 168) || // 192.168.0.0/16
+                    (o1 === 127) || // Loopback
+                    (o1 === 169 && o2 === 254) || // Link Local
+                    (o1 === 100 && o2 >= 64 && o2 <= 127) || // CGNAT
+                    (o1 === 0) || (o1 >= 224); // Reserved/Multicast
+
+                return {
+                    isValid: true,
+                    version: 'IPv4',
+                    isPrivate: isPrivate,
+                    type: isPrivate ? 'Private' : 'Public'
+                };
+            }
+
+            // IPv6 Parsing
+            if (cleanIp.includes(':') && cleanIp.length >= 3) {
+                const lower = cleanIp.toLowerCase();
+                const isPrivate = 
+                    lower === '::1' || 
+                    lower.startsWith('fe80:') || 
+                    lower.startsWith('fc00:') || 
+                    lower.startsWith('fd00:');
+
+                return {
+                    isValid: true,
+                    version: 'IPv6',
+                    isPrivate: isPrivate,
+                    type: isPrivate ? 'Private' : 'Public'
+                };
+            }
+
+            return { isValid: false, type: 'Invalid', isPrivate: false, version: 'Unknown' };
+        }
+
+        // Extract Unique IPs from Text using Regex
+        function extractIPsFromText(text) {
+            const ipv4Regex = /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/g;
+            const ipv6Regex = /\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b/g;
+
+            const v4Matches = text.match(ipv4Regex) || [];
+            const v6Matches = text.match(ipv6Regex) || [];
+
+            return Array.from(new Set([...v4Matches, ...v6Matches]));
+        }
+
+        // Fetch Geolocation details via HTTPS CORS-enabled APIs
+        async function fetchIpGeolocation(ip) {
+            // Primary HTTPS endpoint
+            const primaryUrl = `https://ipwho.is/${ip}`;
+
+            try {
+                const response = await fetch(primaryUrl);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    return {
+                        ip: ip,
+                        country: data.country || 'Unknown',
+                        countryCode: data.country_code || '',
+                        city: data.city || 'Unknown',
+                        lat: parseFloat(data.latitude) || 0,
+                        lon: parseFloat(data.longitude) || 0,
+                        isp: (data.connection && data.connection.isp) ? data.connection.isp : (data.org || 'N/A'),
+                        status: 'Success'
+                    };
+                }
+            } catch (err) {
+                console.warn(`Primary lookup failed for ${ip}, trying fallback...`, err);
+            }
+
+            // Fallback Endpoint (FreeIPAPI)
+            try {
+                const fallbackUrl = `https://freeipapi.com/api/json/${ip}`;
+                const fbResp = await fetch(fallbackUrl);
+                const fbData = await fbResp.json();
+
+                return {
+                    ip: ip,
+                    country: fbData.countryName || 'Unknown',
+                    countryCode: fbData.countryCode || '',
+                    city: fbData.cityName || 'Unknown',
+                    lat: parseFloat(fbData.latitude) || 0,
+                    lon: parseFloat(fbData.longitude) || 0,
+                    isp: fbData.isp || 'N/A',
+                    status: 'Success'
+                };
+            } catch (fbErr) {
+                console.error(`Geolocation failed for ${ip}:`, fbErr);
+            }
+
+            return {
+                ip: ip,
+                country: 'Lookup Failed',
+                countryCode: '',
+                city: 'N/A',
+                lat: null,
+                lon: null,
+                isp: 'N/A',
+                status: 'Failed'
+            };
+        }
+
+        // Run Bulk Geolocation Process
+        async function runBulkGeolocation() {
+            if (appState.isProcessing) return;
+
+            const rawText = elements.ipInputText.value;
+            let ipList = extractIPsFromText(rawText);
+
+            if (ipList.length === 0) {
+                showToast('No valid IP addresses found in input!', 'error');
+                return;
+            }
+
+            const ignorePrivate = elements.chkIgnorePrivate.checked;
+
+            // Reset App State & Setup Controls
+            appState.isProcessing = true;
+            appState.processedResults = [];
+            elements.btnStartProcess.disabled = true;
+            elements.btnStartProcess.classList.add('opacity-50');
+            elements.progressContainer.classList.remove('hidden');
+            updateProgress(0, `Starting processing for ${ipList.length} IPs...`);
+
+            clearMapMarkers();
+
+            let completed = 0;
+            const total = ipList.length;
+
+            for (const ip of ipList) {
+                const info = classifyIP(ip);
+
+                if (!info.isValid) {
+                    appState.processedResults.push({
+                        ip: ip,
+                        version: info.version,
+                        type: 'Invalid',
+                        isPrivate: false,
+                        country: 'Invalid IP',
+                        city: 'N/A',
+                        isp: 'N/A',
+                        lat: null,
+                        lon: null,
+                        status: 'Failed'
+                    });
+                } else if (info.isPrivate) {
+                    if (!ignorePrivate) {
+                        appState.processedResults.push({
+                            ip: ip,
+                            version: info.version,
+                            type: 'Private',
+                            isPrivate: true,
+                            country: 'Internal Network',
+                            countryCode: '',
+                            city: 'Local Area Network',
+                            isp: 'Local / RFC1918',
+                            lat: null,
+                            lon: null,
+                            status: 'Private'
+                        });
+                    }
+                } else {
+                    // Fetch Geolocation for Public IP
+                    const geoData = await fetchIpGeolocation(ip);
+                    appState.processedResults.push({
+                        ip: ip,
+                        version: info.version,
+                        type: 'Public',
+                        isPrivate: false,
+                        ...geoData
+                    });
+
+                    // Pause briefly to respect API rate limits
+                    await new Promise(r => setTimeout(r, 180));
+                }
+
+                completed++;
+                const percent = Math.round((completed / total) * 100);
+                updateProgress(percent, `Processed ${completed} of ${total} IPs`);
+
+                // Dynamic UI Render on each step
+                renderTable();
+                updateStats();
+                updateMap();
+            }
+
+            // Processing Finished
+            appState.isProcessing = false;
+            elements.btnStartProcess.disabled = false;
+            elements.btnStartProcess.classList.remove('opacity-50');
+            elements.statusNotice.textContent = `Completed ${appState.processedResults.length} records`;
+            showToast(`Finished processing ${completed} IP addresses!`, 'success');
+
+            setTimeout(() => {
+                elements.progressContainer.classList.add('hidden');
+            }, 2000);
+
+            // Auto fit boundaries on map
+            fitMapBounds();
+        }
+
+        // Render Results Table
+        function renderTable() {
+            const filtered = getFilteredResults();
+            elements.tableBody.innerHTML = '';
+
+            if (filtered.length === 0) {
+                elements.tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="p-6 text-center text-slate-500 font-sans">
+                            No matching IP records found for the active filter/search.
+                        </td>
+                    </tr>
+                `;
+                elements.tableCountText.textContent = 'Showing 0 entries';
+                return;
+            }
+
+            elements.tableCountText.textContent = `Showing ${filtered.length} of ${appState.processedResults.length} entries`;
+
+            filtered.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-800/50 transition-colors border-b border-slate-800/40';
+
+                // Type Badge
+                let typeBadge = '';
+                if (item.type === 'Public') {
+                    typeBadge = `<span class="px-2 py-0.5 rounded text-[10px] bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 font-semibold">${item.version} Public</span>`;
+                } else if (item.type === 'Private') {
+                    typeBadge = `<span class="px-2 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 font-semibold">${item.version} Private</span>`;
+                } else {
+                    typeBadge = `<span class="px-2 py-0.5 rounded text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 font-semibold">Invalid / Error</span>`;
+                }
+
+                // Country Flag
+                const flagHtml = item.countryCode ? 
+                    `<img src="https://flagcdn.com/16x12/${item.countryCode.toLowerCase()}.png" class="inline-block mr-1.5 rounded-xs" alt="flag">` : '';
+
+                // Google Maps Direct Geotag Link URL
+                const googleGeotagUrl = (item.lat !== null && item.lon !== null) ? 
+                    `https://www.google.com/maps/search/?api=1&query=${item.lat},${item.lon}` : '#';
+
+                tr.innerHTML = `
+                    <td class="p-2.5 font-bold text-slate-200">${item.ip}</td>
+                    <td class="p-2.5">${typeBadge}</td>
+                    <td class="p-2.5 font-sans text-slate-300">${flagHtml}${item.country} <span class="text-slate-500 text-[10px]">(${item.city})</span></td>
+                    <td class="p-2.5 font-sans text-slate-400 truncate max-w-[140px]" title="${item.isp}">${item.isp}</td>
+                    <td class="p-2.5 text-center">
+                        ${(item.lat !== null && item.lon !== null) ? 
+                            `<button onclick="focusOnMap(${item.lat}, ${item.lon}, '${item.ip}')" class="text-indigo-400 hover:text-indigo-300 px-2 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 rounded transition-all" title="Pan Map to Location">
+                                <i class="fa-solid fa-location-crosshairs"></i>
+                             </button>` : 
+                            `<span class="text-slate-600">—</span>`}
+                    </td>
+                    <td class="p-2.5 text-center">
+                        ${(item.lat !== null && item.lon !== null) ? 
+                            `<a href="${googleGeotagUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300 px-2.5 py-1 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded text-[10px] font-sans transition-all" title="Open Google Maps Geotag">
+                                <i class="fa-solid fa-map-pin text-red-400"></i> Google Map
+                             </a>` : 
+                            `<span class="text-slate-600 text-[10px]">N/A</span>`}
+                    </td>
+                `;
+
+                elements.tableBody.appendChild(tr);
+            });
+        }
+
+        function getFilteredResults() {
+            return appState.processedResults.filter(item => {
+                // Filter status
+                if (appState.currentFilter === 'public' && item.type !== 'Public') return false;
+                if (appState.currentFilter === 'private' && item.type !== 'Private') return false;
+                if (appState.currentFilter === 'failed' && item.status !== 'Failed') return false;
+
+                // Search query match
+                if (appState.searchQuery) {
+                    const q = appState.searchQuery.toLowerCase();
+                    const matchIp = item.ip.toLowerCase().includes(q);
+                    const matchCountry = (item.country || '').toLowerCase().includes(q);
+                    const matchCity = (item.city || '').toLowerCase().includes(q);
+                    const matchIsp = (item.isp || '').toLowerCase().includes(q);
+                    return matchIp || matchCountry || matchCity || matchIsp;
+                }
+
+                return true;
+            });
+        }
+
+        // Update Map Markers with Google Maps Geotag Buttons
+        function updateMap() {
+            clearMapMarkers();
+
+            const validLocations = appState.processedResults.filter(r => r.lat !== null && r.lon !== null);
+
+            validLocations.forEach(item => {
+                // Micro jitter coordinates to prevent identical city markers overlapping
+                const jitterLat = item.lat + (Math.random() - 0.5) * 0.008;
+                const jitterLon = item.lon + (Math.random() - 0.5) * 0.008;
+
+                const pulseClass = item.type === 'Public' ? 'pulse-public' : 'pulse-private';
+
+                const customIcon = L.divIcon({
+                    className: 'custom-map-marker',
+                    html: `<div class="marker-pin ${pulseClass}"></div>`,
+                    iconSize: [30, 42],
+                    iconAnchor: [15, 42]
+                });
+
+                const flagHtml = item.countryCode ? 
+                    `<img src="https://flagcdn.com/24x18/${item.countryCode.toLowerCase()}.png" class="inline-block mr-1.5 rounded-sm">` : '';
+
+                const googleGeotagUrl = `https://www.google.com/maps/search/?api=1&query=${item.lat},${item.lon}`;
+
+                const popupContent = `
+                    <div class="p-1.5 text-xs space-y-1.5">
+                        <div class="font-bold font-mono text-sm text-cyan-400 flex items-center gap-1.5">
+                            <i class="fa-solid fa-network-wired"></i> ${item.ip}
+                        </div>
+                        <div class="text-slate-200 font-sans flex items-center gap-1.5">
+                            ${flagHtml} <span>${item.city}, <strong>${item.country}</strong></span>
+                        </div>
+                        <div class="text-slate-400 font-sans text-[11px]">
+                            <strong>ISP:</strong> ${item.isp}
+                        </div>
+                        <div class="text-slate-500 font-mono text-[10px]">
+                            Lat: ${item.lat.toFixed(4)}, Lon: ${item.lon.toFixed(4)}
+                        </div>
+                        <div class="pt-1.5 border-t border-slate-800">
+                            <a href="${googleGeotagUrl}" target="_blank" rel="noopener noreferrer" class="w-full text-center inline-flex items-center justify-center gap-1.5 py-1.5 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-sans text-xs font-semibold shadow-md transition-all">
+                                <i class="fa-solid fa-location-dot text-red-300"></i> Open Google Maps Geotag
+                            </a>
+                        </div>
+                    </div>
+                `;
+
+                const marker = L.marker([jitterLat, jitterLon], { icon: customIcon })
+                    .bindPopup(popupContent)
+                    .addTo(map);
+
+                mapMarkers.push(marker);
+            });
+        }
+
+        function clearMapMarkers() {
+            mapMarkers.forEach(m => map.removeLayer(m));
+            mapMarkers = [];
+        }
+
+        function fitMapBounds() {
+            if (mapMarkers.length === 0) return;
+            const group = new L.featureGroup(mapMarkers);
+            map.fitBounds(group.getBounds().pad(0.15));
+        }
+
+        window.focusOnMap = function(lat, lon, ip) {
+            map.flyTo([lat, lon], 11, { duration: 1.2 });
+            const foundMarker = mapMarkers.find(m => {
+                const pos = m.getLatLng();
+                return Math.abs(pos.lat - lat) < 0.02 && Math.abs(pos.lng - lon) < 0.02;
+            });
+            if (foundMarker) {
+                setTimeout(() => foundMarker.openPopup(), 1250);
+            }
+        };
+
+        // Update Statistics Counters
+        function updateStats() {
+            const total = appState.processedResults.length;
+            const publicCount = appState.processedResults.filter(r => r.type === 'Public').length;
+            const privateCount = appState.processedResults.filter(r => r.type === 'Private').length;
+            const geotaggedCount = appState.processedResults.filter(r => r.lat !== null && r.lon !== null).length;
+
+            elements.statTotal.textContent = total;
+            elements.statPublic.textContent = publicCount;
+            elements.statPrivate.textContent = privateCount;
+            elements.statGeotagged.textContent = geotaggedCount;
+        }
+
+        // Setup Event Listeners
+        function setupEventListeners() {
+            // Input Tab Toggles
+            elements.tabTextBtn.addEventListener('click', () => {
+                elements.tabTextBtn.className = "px-3 py-1 text-xs font-semibold rounded-md bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 transition-all";
+                elements.tabFileBtn.className = "px-3 py-1 text-xs font-semibold rounded-md text-slate-400 hover:text-white transition-all";
+                elements.tabTextArea.classList.remove('hidden');
+                elements.tabFileArea.classList.add('hidden');
+            });
+
+            elements.tabFileBtn.addEventListener('click', () => {
+                elements.tabFileBtn.className = "px-3 py-1 text-xs font-semibold rounded-md bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 transition-all";
+                elements.tabTextBtn.className = "px-3 py-1 text-xs font-semibold rounded-md text-slate-400 hover:text-white transition-all";
+                elements.tabFileArea.classList.remove('hidden');
+                elements.tabTextArea.classList.add('hidden');
+            });
+
+            // Live IP Extraction Badge
+            elements.ipInputText.addEventListener('input', () => {
+                const extracted = extractIPsFromText(elements.ipInputText.value);
+                if (extracted.length > 0) {
+                    elements.extractedCountBadge.textContent = `${extracted.length} IPs detected`;
+                    elements.extractedCountBadge.classList.remove('hidden');
+                } else {
+                    elements.extractedCountBadge.classList.add('hidden');
+                }
+            });
+
+            // File Upload & Drag-and-Drop
+            elements.dropZone.addEventListener('click', () => elements.fileInput.click());
+
+            elements.dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                elements.dropZone.classList.add('border-indigo-500', 'bg-indigo-950/20');
+            });
+
+            elements.dropZone.addEventListener('dragleave', () => {
+                elements.dropZone.classList.remove('border-indigo-500', 'bg-indigo-950/20');
+            });
+
+            elements.dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                elements.dropZone.classList.remove('border-indigo-500', 'bg-indigo-950/20');
+                if (e.dataTransfer.files.length) {
+                    handleUploadedFile(e.dataTransfer.files[0]);
+                }
+            });
+
+            elements.fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length) {
+                    handleUploadedFile(e.target.files[0]);
+                }
+            });
+
+            // Action Buttons
+            elements.btnStartProcess.addEventListener('click', runBulkGeolocation);
+
+            elements.btnSampleData.addEventListener('click', () => {
+                elements.ipInputText.value = SAMPLE_IPS.join('\n');
+                elements.ipInputText.dispatchEvent(new Event('input'));
+                showToast('Sample IP addresses loaded!', 'info');
+            });
+
+            elements.btnClear.addEventListener('click', () => {
+                appState.processedResults = [];
+                elements.ipInputText.value = '';
+                elements.extractedCountBadge.classList.add('hidden');
+                renderTable();
+                updateStats();
+                clearMapMarkers();
+                map.setView([20, 0], 2);
+                showToast('Cleared all data', 'info');
+            });
+
+            // Map Layer Dropdown Switcher
+            elements.mapLayerSelect.addEventListener('change', (e) => {
+                switchMapLayer(e.target.value);
+            });
+
+            // Filter Pills
+            document.querySelectorAll('.btn-filter').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.btn-filter').forEach(b => {
+                        b.className = "btn-filter px-2.5 py-1 text-[11px] rounded font-medium text-slate-400 hover:text-white";
+                    });
+                    e.target.className = "btn-filter px-2.5 py-1 text-[11px] rounded font-medium bg-indigo-600 text-white";
+                    appState.currentFilter = e.target.getAttribute('data-filter');
+                    renderTable();
+                });
+            });
+
+            // Table Search
+            elements.tableSearch.addEventListener('input', (e) => {
+                appState.searchQuery = e.target.value.trim();
+                renderTable();
+            });
+
+            // Export to CSV
+            elements.btnExportCSV.addEventListener('click', exportResultsToCSV);
+
+            // Map Tools
+            elements.btnFitMap.addEventListener('click', fitMapBounds);
+            elements.btnResetMap.addEventListener('click', () => map.setView([20, 0], 2));
+        }
+
+        // Read File Contents
+        function handleUploadedFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const text = e.target.result;
+                elements.ipInputText.value = text;
+                elements.ipInputText.dispatchEvent(new Event('input'));
+                elements.tabTextBtn.click();
+                showToast(`Loaded file: ${file.name}`, 'success');
+            };
+            reader.readAsText(file);
+        }
+
+        // CSV Exporter
+        function exportResultsToCSV() {
+            if (appState.processedResults.length === 0) {
+                showToast('No geolocation data available to export.', 'error');
+                return;
+            }
+
+            const headers = ['IP Address', 'IP Version', 'Network Type', 'Status', 'Country', 'City', 'ISP', 'Latitude', 'Longitude', 'Google Maps Geotag Link'];
+            
+            const csvRows = [headers.join(',')];
+
+            appState.processedResults.forEach(r => {
+                const googleLink = (r.lat !== null && r.lon !== null) ? 
+                    `https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lon}` : 'N/A';
+
+                const row = [
+                    `"${r.ip}"`,
+                    `"${r.version || ''}"`,
+                    `"${r.type || ''}"`,
+                    `"${r.status || ''}"`,
+                    `"${r.country || ''}"`,
+                    `"${r.city || ''}"`,
+                    `"${(r.isp || '').replace(/"/g, '""')}"`,
+                    `"${r.lat !== null ? r.lat : ''}"`,
+                    `"${r.lon !== null ? r.lon : ''}"`,
+                    `"${googleLink}"`
+                ];
+                csvRows.push(row.join(','));
+            });
+
+            const csvString = csvRows.join('\n');
+            const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `geopulse_results_${Date.now()}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            showToast('CSV export downloaded!', 'success');
+        }
+
+        // Progress Bar Updater
+        function updateProgress(percent, text) {
+            elements.progressBar.style.width = `${percent}%`;
+            elements.progressPercent.textContent = `${percent}%`;
+            elements.progressText.textContent = text;
+        }
+
+        // Toast Messages Helper
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            let bgClass = 'bg-slate-800 border-slate-700 text-slate-200';
+            let icon = 'fa-circle-info text-indigo-400';
+
+            if (type === 'success') {
+                bgClass = 'bg-slate-900 border-emerald-500/50 text-emerald-200';
+                icon = 'fa-circle-check text-emerald-400';
+            } else if (type === 'error') {
+                bgClass = 'bg-slate-900 border-red-500/50 text-red-200';
+                icon = 'fa-triangle-exclamation text-red-400';
+            }
+
+            toast.className = `flex items-center gap-2.5 px-4 py-2.5 rounded-lg border shadow-2xl text-xs font-medium backdrop-blur-md transition-all duration-300 transform translate-y-2 opacity-0 pointer-events-auto ${bgClass}`;
+            toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${message}</span>`;
+
+            const container = document.getElementById('toastContainer');
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
